@@ -1,0 +1,247 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      html,
+      body,
+      div,
+      p,
+      table,
+      tr,
+      td {
+        margin: 0 !important;
+        padding: 0 !important;
+        border-spacing: 0 !important;
+        border-collapse: collapse !important;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      .main {
+        height: 100%;
+        box-sizing: border-box;
+      }
+      .bordered-table td {
+        border: 1px solid #999;
+        padding: 3px 5px !important;
+      }
+      .bordered-table th {
+        border: 1px solid #999;
+        padding: 3px 5px !important;
+        background-color: #f0f0f0;
+      }
+      .highlight-row td {
+        background-color: #fff3cd;
+        font-weight: bold;
+      }
+      .final-total-row td {
+        background-color: #d4edda;
+        font-weight: bold;
+        font-size: 11px !important;
+      }
+    </style>
+  </head>
+  <body
+    style="
+      font-family: &quot;Khmer OS Siemreap&quot;, Consolas, monospace;
+      font-size: 10px;
+      margin: 0 !important;
+      padding: 0 !important;
+      box-sizing: border-box;
+      color: black;
+    "
+  >
+    <div class="main">
+      {% if logo_img %}
+      <div style="text-align: center; padding: 0px; margin: 0px">
+        {{ logo_img|safe }}
+      </div>
+      {% endif %}
+
+      <div style="text-align: center; font-size: 14px; padding: 0 !important">
+        {{ biz_name }}
+      </div>
+      <div style="text-align: center; font-size: 10px">
+        {{ receipt_header }}
+      </div>
+      <div style="text-align: center; font-size: 10px">{{ biz_address }}</div>
+      <div style="text-align: center; font-size: 10px">
+        {% if biz_phone %}លេខទំនាក់ទំនង : {{ biz_phone }}<br />{% endif %} {% if
+        biz_mobile %}លេខទូរស័ព្ទដៃ : {{ biz_mobile }}<br />{% endif %} {% if
+        biz_telegram %}តេឡេក្រាម : {{ biz_telegram }}<br />{% endif %}{% if
+        biz_facebook %}ហ្វេសប៊ុក : {{ biz_facebook }}{% endif %}
+      </div>
+      {# ===== BRANDS ===== #} {% if brands %}
+      <div style="text-align: center; font-size: 10px; margin-top: 4px">
+        {% for brand in brands %}
+        <div style="margin-bottom: 3px">
+          <b>{{ brand.name }}</b>
+          {% if brand.phone %} | {{ brand.phone }}{% endif %} {% if
+          brand.telegram %} | TG: {{ brand.telegram }}{% endif %} {% if
+          brand.facebook %} | FB: {{ brand.facebook }}{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %} {{ divider|safe }}
+
+      <table
+        width="100%"
+        style="font-size: 9px"
+        cellspacing="0"
+        cellpadding="2"
+      >
+        <tr>
+          <td>វិក្កយប័ត្រ</td>
+          <td align="right">{{ invoice_prefix }}-{{ order.order_number }}</td>
+        </tr>
+        <tr>
+          <td>កាលបរិច្ឆេទ</td>
+          <td align="right">{{ order.created_at }}</td>
+        </tr>
+        <tr>
+          <td>ឈ្មោះអតិថិជន</td>
+          <td align="right">{{ order.customer_name }}</td>
+        </tr>
+        <tr>
+          <td>លេខទំនាក់ទំនង</td>
+          <td align="right">{{ order.phone }}</td>
+        </tr>
+        <tr>
+          <td>តេឡេក្រាម</td>
+          <td align="right">{{ order.telegram }}</td>
+        </tr>
+        <tr>
+          <td>ហ្វេសប៊ុក</td>
+          <td align="right">{{ order.facebook }}</td>
+        </tr>
+        <tr>
+          <td>អាសយដ្ឋាន</td>
+          <td align="right">{{ order.address }}</td>
+        </tr>
+        <tr>
+          <td>កាលបរិច្ឆេទទទួល</td>
+          <td align="right">{{ order.pickup_time }}</td>
+        </tr>
+      </table>
+
+      {{ divider|safe }}
+      <table
+        width="100%"
+        cellspacing="0"
+        cellpadding="2"
+        style="border: 1px solid #999; border-collapse: collapse"
+      >
+        <tr>
+          <th
+            style="
+              font-size: 9px;
+              border: 1px solid #999;
+              background-color: #f0f0f0;
+            "
+          >
+            ទំនិញ
+          </th>
+          <th
+            style="
+              font-size: 9px;
+              border: 1px solid #999;
+              background-color: #f0f0f0;
+            "
+          >
+            ឯកតា
+          </th>
+          <th
+            style="
+              font-size: 9px;
+              border: 1px solid #999;
+              background-color: #f0f0f0;
+            "
+          >
+            បរិមាណ×តម្លៃ
+          </th>
+          <th
+            style="
+              font-size: 9px;
+              border: 1px solid #999;
+              background-color: #f0f0f0;
+            "
+          >
+            សរុប
+          </th>
+        </tr>
+        {% for item in items %}
+        <tr>
+          <td
+            style="font-size: 10px; font-weight: bold; border: 1px solid #999"
+          >
+            {{ item.product_name }}({{ item.taste }})
+          </td>
+          <td style="font-size: 10px; border: 1px solid #999">
+            {{ item.unit }}
+          </td>
+          <td style="font-size: 10px; border: 1px solid #999">
+            {{ item.quantity }} × {{ "{:,.2f}".format(item.unit_price) }} $
+          </td>
+          <td align="right" style="font-size: 10px; border: 1px solid #999">
+            {{ "{:,.2f}".format(item.subtotal) }} $
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+      {{ divider|safe }}
+
+      <table
+        width="100%"
+        cellspacing="0"
+        cellpadding="2"
+        class="bordered-table"
+      >
+        <tr>
+          <td>តម្លៃសរុប</td>
+          <td align="right">{{ "{:,.2f}".format(items_total) }}$</td>
+        </tr>
+        <tr>
+          <td>ថ្លៃដឹកជញ្ចូន</td>
+          <td align="right">{{ "{:,.2f}".format(order.delivery_fee) }} $</td>
+        </tr>
+        <tr>
+          <td>បញ្ចុះតម្លៃ</td>
+          <td align="right">-{{ "{:,.2f}".format(order.discount) }} $</td>
+        </tr>
+        <tr>
+          <td>
+            បានបង់ប្រាក់ {%if order.paid_amount > 0%}({{
+            order.payment_method}}){%endif%}
+          </td>
+          <td align="right">-{{ "{:,.2f}".format(order.paid_amount) }} $</td>
+        </tr>
+        <tr class="final-total-row">
+          <td><b>តម្លៃសរុបចុងក្រោយ(USD)</b></td>
+          <td align="right">
+            {{ "{:,.2f}".format((order.total_amount + order.delivery_fee) -
+            (order.paid_amount + order.discount)) }} $
+          </td>
+        </tr>
+        <tr class="final-total-row">
+          <td><b>តម្លៃសរុបចុងក្រោយ(រៀល)</b></td>
+          <td align="right">
+            {{ "{:,.2f}".format(((order.total_amount + order.delivery_fee) -
+            (order.paid_amount + order.discount)) * biz_exchange_rate) }} ៛
+          </td>
+        </tr>
+      </table>
+
+      {{ divider|safe }} {% if khqr_img %}
+      <div style="text-align: center; margin-top: 12px">
+        {{ khqr_img|safe }}
+      </div>
+      {% endif %}
+
+      <div style="text-align: center; margin-top: 12px; font-size: 18px">
+        {{ receipt_footer }}
+      </div>
+    </div>
+  </body>
+</html>

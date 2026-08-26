@@ -1,0 +1,9 @@
+releases/
+build/
+dist/
+__pycache__/
+*.pyc
+*.spec
+pos.db
+venv/
+.venv/
