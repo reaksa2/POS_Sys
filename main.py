@@ -2,8 +2,8 @@ import os
 os.environ["QT_LOGGING_RULES"] = "qt.text.font.db=false"
 import sys
 from PySide6.QtWidgets import QApplication
-from PySide6.QtGui import QFontDatabase, QFont
-from PySide6.QtCore import QTimer
+from PySide6.QtGui import QFontDatabase, QFont,QDesktopServices
+from PySide6.QtCore import QTimer,QUrl
 
 from ui.splash import SplashScreen
 from ui.login.login_window import LoginWindow
@@ -22,6 +22,7 @@ from database.models.BrandModel import BrandModel
 from utils.utils import resource_path
 from utils.style import get_app_global_style
 from utils.backup import backup_database
+from utils.dialog import save_success_message, none_selected_warning, confirm_delete
 class POS(QApplication):
     def __init__(self, argv):
         
@@ -144,27 +145,23 @@ class POS(QApplication):
         self._update_worker.start()
 
     def on_update_available(self, version, url, notes):
-        from PySide6.QtWidgets import QMessageBox
-        from PySide6.QtCore import QUrl
-        from PySide6.QtGui import QDesktopServices
 
-        msg = QMessageBox()
-        msg.setWindowTitle("មានកំណែថ្មី!")
-        msg.setText(f"កំណែថ្មី {version} អាចប្រើប្រាស់បាន។\n\n{notes[:300]}")
-        msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        msg.button(QMessageBox.StandardButton.Yes).setText("ទាញយកឥឡូវនេះ")
-        msg.button(QMessageBox.StandardButton.No).setText("ពេលក្រោយ")
+        should_download = confirm_delete(
+            self.main_window,   # ← actual QWidget parent
+            message=f"កំណែថ្មី {version} អាចប្រើប្រាស់បាន។\n\n{notes[:300]}",
+            confirm_text="ទាញយកឥឡូវនេះ",
+            cancel_text="ពេលក្រោយ",
+            win_title="មានកំណែថ្មី!"
+        )
 
-        if msg.exec() == QMessageBox.StandardButton.Yes and url:
+        if should_download and url:
             QDesktopServices.openUrl(QUrl(url))
 
     def on_no_update(self):
-        from PySide6.QtWidgets import QMessageBox
-        QMessageBox.information(None, "កំណែថ្មីៗ", "អ្នកកំពុងប្រើកំណែចុងក្រោយបំផុតរួចហើយ។")
+        save_success_message(self.main_window, message="អ្នកកំពុងប្រើកំណែចុងក្រោយបំផុតរួចហើយ។", win_title="កំណែថ្មីៗ", auto_close_ms=None)
 
     def on_update_check_failed(self, error):
-        from PySide6.QtWidgets import QMessageBox
-        QMessageBox.warning(None, "បរាជ័យ", f"មិនអាចពិនិត្យកំណែថ្មីបានទេ:\n{error}")
+        none_selected_warning(self.main_window, message=f"មិនអាចពិនិត្យកំណែថ្មីបានទេ:\n{error}", win_title="បរាជ័យ",auto_close_ms=None)
 
 
 if __name__ == "__main__":
