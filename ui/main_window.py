@@ -11,7 +11,7 @@ from ui.settings.settings_widget import SettingsWidget
 from ui.order.order_widget import OrderWidget
 from ui.report.report_widget import ReportWidget
 from ui.stock.stock_widget import StockWidget
-from utils.style import PAGE_TITLE_STYLE, PAGE_HEADER_STYLE, SIDEBAR_STYLE
+from utils.style import PAGE_TITLE_STYLE, PAGE_HEADER_STYLE, SIDEBAR_STYLE,BTN_SAVE
 from utils.utils import resource_path
 from utils.dialog import save_success_message,none_selected_warning,confirm_delete
 
@@ -256,6 +256,11 @@ class MainWindow(QMainWindow):
         version.setStyleSheet("font-size: 13px; color: #666;")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(version)
+
+        check_update_btn = QPushButton("🔄 ពិនិត្យរកកំណែថ្មី")
+        check_update_btn.setStyleSheet(BTN_SAVE)
+        check_update_btn.clicked.connect(lambda: self.app.check_for_updates(silent=False))
+        layout.addWidget(check_update_btn)
 
         divider = QFrame()
         divider.setFrameShape(QFrame.HLine)

@@ -97,6 +97,7 @@ class POS(QApplication):
         self.user = user
         self.main_window = MainWindow(self, user)
         self.main_window.show()
+        self.check_for_updates(silent=True) 
 
     def load_custom_fonts(self):
         font_path = str(resource_path("fonts/Khmer OS Siemreap Regular.ttf"))
@@ -130,6 +131,40 @@ class POS(QApplication):
             print("Daily auto-backup completed.")
         except Exception as e:
             print(f"Auto-backup failed: {e}")
+
+    def check_for_updates(self, silent=True):
+        from utils.update_checker import UpdateCheckWorker
+        self._update_worker = UpdateCheckWorker()
+        self._update_worker.update_available.connect(
+            lambda v, url, notes: self.on_update_available(v, url, notes)
+        )
+        if not silent:
+            self._update_worker.no_update.connect(self.on_no_update)
+            self._update_worker.check_failed.connect(self.on_update_check_failed)
+        self._update_worker.start()
+
+    def on_update_available(self, version, url, notes):
+        from PySide6.QtWidgets import QMessageBox
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+
+        msg = QMessageBox()
+        msg.setWindowTitle("មានកំណែថ្មី!")
+        msg.setText(f"កំណែថ្មី {version} អាចប្រើប្រាស់បាន។\n\n{notes[:300]}")
+        msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        msg.button(QMessageBox.StandardButton.Yes).setText("ទាញយកឥឡូវនេះ")
+        msg.button(QMessageBox.StandardButton.No).setText("ពេលក្រោយ")
+
+        if msg.exec() == QMessageBox.StandardButton.Yes and url:
+            QDesktopServices.openUrl(QUrl(url))
+
+    def on_no_update(self):
+        from PySide6.QtWidgets import QMessageBox
+        QMessageBox.information(None, "កំណែថ្មីៗ", "អ្នកកំពុងប្រើកំណែចុងក្រោយបំផុតរួចហើយ។")
+
+    def on_update_check_failed(self, error):
+        from PySide6.QtWidgets import QMessageBox
+        QMessageBox.warning(None, "បរាជ័យ", f"មិនអាចពិនិត្យកំណែថ្មីបានទេ:\n{error}")
 
 
 if __name__ == "__main__":
