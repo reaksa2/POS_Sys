@@ -6,3 +6,5 @@ based_color "#7b5d11"
 pyinstaller --noconfirm --onefile --windowed --name POS --collect-all PySide6 --collect-all matplotlib --add-data "ui/order/receipt.html;ui/order" --add-data "resources;resources" --add-data "fonts;fonts" --add-data "logo.ico;." --add-data "logo.png;." --icon "logo.ico" main.py
 
 pyinstaller --noconfirm --onefile --windowed --name "POS" --collect-all PySide6 --collect-all matplotlib --add-data "ui/order/receipt.html;ui/order" --add-data "resources;resources" --add-data "fonts;fonts" --add-data "logo.ico;." --add-data "logo.png;." --icon "logo.ico" main.py
+
+pyinstaller --noconfirm --onefile --windowed --name "POS" --collect-all PySide6 --collect-all matplotlib --add-data "ui/order/receipt.html;ui/order" --add-data "resources;resources" --add-data "fonts;fonts" --add-data "logo.ico;." --add-data "logo.png;." --icon "logo.ico" main.py
