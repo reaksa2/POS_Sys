@@ -2,7 +2,7 @@ import requests
 from PySide6.QtCore import QThread, Signal
 
 
-CURRENT_VERSION = "1.3.0"   # ← update this each time you release
+CURRENT_VERSION = "1.4.0"   # ← update this each time you release
 GITHUB_REPO = "reaksa2/POS_Sys"   # your repo
 
 
