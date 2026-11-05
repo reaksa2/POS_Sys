@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QLineEdit, QTextEdit, QFormLayout, QTabWidget, QDoubleSpinBox,
     QTableWidget, QTableWidgetItem, QHeaderView, QComboBox,
     QMessageBox, QDialog, QDialogButtonBox, QFrame,
-    QFileDialog, QGroupBox, QScrollArea,QCheckBox,QApplication
+    QFileDialog, QGroupBox, QScrollArea,QCheckBox,QApplication,QSpinBox
 )
 
 from PySide6.QtGui import QPixmap,QTextDocument, QPageSize, QPageLayout, QFont
@@ -50,12 +50,18 @@ class SettingsWidget(QWidget):
         self.setup_backup_tab()
         self.tabs.addTab(self.tab_backup, "💾 បម្រុងទុក")
 
+        self.tab_cloud = QWidget()
+        self.setup_cloud_tab()
+        self.tabs.addTab(self.tab_cloud, "☁️ Cloud")
+
         
 
         layout.addWidget(self.tabs)
 
     def refresh(self):
         self.load_users()
+        self.load_backup_list()
+        self.update_cloud_status_label()
 
     # ==================== BUSINESS TAB ====================
     def setup_business_tab(self):
@@ -96,6 +102,7 @@ class SettingsWidget(QWidget):
         self.biz_phone.setText(s.get("business_phone", ""))
         self.biz_facebook.setText(s.get("business_facebook", ""))
         self.biz_telegram.setText(s.get("business_telegram", ""))
+        self.biz_address.setText(s.get("business_address", ""))
         # self.khqr_image.setText(s.get("khqr_image", ""))
         self.receipt_footer.setPlainText(s.get("receipt_footer", "សូមអរគុណ!"))
 
@@ -303,10 +310,12 @@ class SettingsWidget(QWidget):
         
         self.app.settings.set_many(data)
         brands = self.get_brands_data()
-        # if not brands:
-        #     QMessageBox.warning(self, "Warning", "សូមបញ្ចូលម៉ាកយ៉ាងហោចណាស់មួយ")
-        #     return
+        if not brands:
+            # Saving with no brand would deactivate every brand -> no products can be sold.
+            none_selected_warning(self, message="សូមបញ្ចូលម៉ាកយ៉ាងហោចណាស់មួយ", win_title="ម៉ាក / សាខា", auto_close_ms=None)
+            return
         self.app.brand.create_brands(brands)
+        self.load_brands()   # reload so newly-inserted brands get their ids (avoids duplicates on 2nd save)
 
         save_success_message(self, message="ការកំណត់ព័ត៌មានទូទៅជោគជ័យ")
 
@@ -605,10 +614,9 @@ class SettingsWidget(QWidget):
             </div>
         """)
 
-        a5_size = QPageSize(QSizeF(148, 210), QPageSize.Millimeter, "A5 Custom")
-        printer.setPageSize(a5_size)
-        printer.setPageOrientation(QPageLayout.Portrait)
-        printer.setPageMargins(QMarginsF(8, 8, 8, 8), QPageLayout.Millimeter)
+        # use the paper size currently selected in the combo (even before saving)
+        from utils.printing import apply_paper_settings
+        apply_paper_settings(printer, {"receipt_paper_size": self.paper_size_combo.currentData()})
         doc.setPageSize(printer.pageRect(QPrinter.Point).size())
 
         try:
@@ -938,8 +946,242 @@ class SettingsWidget(QWidget):
             )
         except Exception as e:
             QMessageBox.critical(self, "Restore Error", f"បរាជ័យក្នុងការស្តារ:\n{e}")
-    
-    
 
+    # ==================== CLOUD (SUPABASE) TAB ====================
+    def setup_cloud_tab(self):
+        root = QVBoxLayout(self.tab_cloud)
+        root.setContentsMargins(10, 10, 10, 10)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        scroll.setWidget(container)
+        root.addWidget(scroll)
 
-    
+        # ---------- how-to ----------
+        info = QGroupBox("☁️ បម្រុងទុកទិន្នន័យលើ Cloud (Supabase — ឥតគិតថ្លៃ)")
+        info.setStyleSheet(self.group_style())
+        info_layout = QVBoxLayout(info)
+        steps = QLabel(
+            "1. ចុះឈ្មោះនៅ supabase.com ហើយបង្កើត Project ថ្មី (Free plan)\n"
+            "2. ចុច «📋 ចម្លង SQL» ខាងក្រោម → ទៅ Supabase › SQL Editor → បិទភ្ជាប់ → Run\n"
+            "3. Project Settings › API Keys → ចម្លង Project URL និង Secret key (sb_secret_…)\n"
+            "4. បិទភ្ជាប់ខាងក្រោម → «រក្សាទុក» → «សាកល្បងការតភ្ជាប់» → «ធ្វើសមកាលកម្មឥឡូវនេះ»\n\n"
+            "ទិន្នន័យនៅលើកុំព្យូទ័រនេះនៅតែជាទិន្នន័យមេ — កម្មវិធីដំណើរការបានទោះគ្មានអ៊ីនធឺណិត។\n"
+            "⚠️ កុំចែករំលែក Secret key ទៅអ្នកដទៃ។"
+        )
+        steps.setWordWrap(True)
+        steps.setStyleSheet("color: #CCCCCC; font-size: 13px; font-weight: normal;")
+        info_layout.addWidget(steps)
+        layout.addWidget(info)
+
+        # ---------- credentials ----------
+        cred = QGroupBox("🔑 ការតភ្ជាប់")
+        cred.setStyleSheet(self.group_style())
+        form = QFormLayout(cred)
+        form.setSpacing(10)
+
+        self.cloud_url = QLineEdit()
+        self.cloud_url.setPlaceholderText("https://xxxxxxxx.supabase.co")
+        self.cloud_url.setStyleSheet(INPUT_STYLE)
+
+        key_row = QHBoxLayout()
+        self.cloud_key = QLineEdit()
+        self.cloud_key.setPlaceholderText("sb_secret_…  (ឬ service_role key)")
+        self.cloud_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.cloud_key.setStyleSheet(INPUT_STYLE)
+        show_key = QCheckBox("បង្ហាញ")
+        show_key.toggled.connect(lambda on: self.cloud_key.setEchoMode(
+            QLineEdit.EchoMode.Normal if on else QLineEdit.EchoMode.Password))
+        key_row.addWidget(self.cloud_key, stretch=1)
+        key_row.addWidget(show_key)
+
+        auto_row = QHBoxLayout()
+        self.cloud_auto = QCheckBox("ធ្វើសមកាលកម្មដោយស្វ័យប្រវត្តិ រៀងរាល់")
+        self.cloud_interval = QSpinBox()
+        self.cloud_interval.setRange(5, 1440)
+        self.cloud_interval.setValue(15)
+        self.cloud_interval.setSuffix(" នាទី")
+        self.cloud_interval.setStyleSheet("QSpinBox { background-color:#1F1F1F; color:white; padding:6px; border:1px solid #444; border-radius:8px; }")
+        auto_row.addWidget(self.cloud_auto)
+        auto_row.addWidget(self.cloud_interval)
+        auto_row.addStretch()
+
+        form.addRow("Project URL:", self.cloud_url)
+        form.addRow("Secret key:", key_row)
+        form.addRow("", auto_row)
+        layout.addWidget(cred)
+
+        # ---------- actions ----------
+        row1 = QHBoxLayout()
+        save_btn = QPushButton("💾 រក្សាទុក")
+        save_btn.setStyleSheet(BTN_SAVE)
+        save_btn.clicked.connect(self.save_cloud_settings)
+        copy_sql_btn = QPushButton("📋 ចម្លង SQL")
+        copy_sql_btn.setStyleSheet(self._button_style("#4B5563", "#6B7280"))
+        copy_sql_btn.clicked.connect(self.copy_cloud_schema)
+        self.cloud_test_btn = QPushButton("🔌 សាកល្បងការតភ្ជាប់")
+        self.cloud_test_btn.setStyleSheet(self._button_style("#4B5563", "#6B7280"))
+        self.cloud_test_btn.clicked.connect(self.test_cloud_connection)
+        row1.addWidget(save_btn)
+        row1.addWidget(copy_sql_btn)
+        row1.addWidget(self.cloud_test_btn)
+        layout.addLayout(row1)
+
+        row2 = QHBoxLayout()
+        self.cloud_sync_btn = QPushButton("☁️⬆️ ធ្វើសមកាលកម្មឥឡូវនេះ")
+        self.cloud_sync_btn.setStyleSheet(self._button_style("#22C55E", "#16A34A"))
+        self.cloud_sync_btn.clicked.connect(self.cloud_sync_now)
+        self.cloud_download_btn = QPushButton("☁️⬇️ ទាញយកទិន្នន័យពី Cloud")
+        self.cloud_download_btn.setStyleSheet(self._button_style("#3B82F6", "#2563EB"))
+        self.cloud_download_btn.clicked.connect(self.cloud_download)
+        row2.addWidget(self.cloud_sync_btn)
+        row2.addWidget(self.cloud_download_btn)
+        layout.addLayout(row2)
+
+        self.cloud_status = QLabel("")
+        self.cloud_status.setWordWrap(True)
+        self.cloud_status.setStyleSheet("color: #999; font-size: 12px;")
+        layout.addWidget(self.cloud_status)
+
+        hint = QLabel("💡 «ទាញយកទិន្នន័យពី Cloud» បង្កើតឯកសារបម្រុងទុកថ្មីក្នុងផ្ទាំង 💾 បម្រុងទុក — "
+                      "ទិន្នន័យបច្ចុប្បន្នមិនត្រូវបានប៉ះពាល់ទេ។ ចុចពីរដងលើវាដើម្បីស្តារ (ឧ. ពេលប្តូរកុំព្យូទ័រថ្មី)។")
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #777; font-size: 12px;")
+        layout.addWidget(hint)
+        layout.addStretch()
+
+        self._cloud_worker = None
+        self.load_cloud_settings()
+
+    def load_cloud_settings(self):
+        s = self.app.settings.get_all()
+        self.cloud_url.setText(s.get("cloud_supabase_url", ""))
+        self.cloud_key.setText(s.get("cloud_supabase_key", ""))
+        self.cloud_auto.setChecked(s.get("cloud_auto_sync", "0") == "1")
+        try:
+            self.cloud_interval.setValue(int(float(s.get("cloud_sync_interval_min", 15) or 15)))
+        except ValueError:
+            self.cloud_interval.setValue(15)
+        self.update_cloud_status_label()
+
+    def update_cloud_status_label(self):
+        if not hasattr(self, "cloud_status"):
+            return
+        last = self.app.settings.get("cloud_last_sync_at", "")
+        result = self.app.settings.get("cloud_last_result", "")
+        text = f"សមកាលកម្មចុងក្រោយ: {last or 'មិនទាន់មាន'}"
+        if result:
+            text += f"\n{result}"
+        self.cloud_status.setText(text)
+
+    def save_cloud_settings(self, silent=False):
+        url = self.cloud_url.text().strip().rstrip("/")
+        if url and not url.startswith("https://"):
+            none_selected_warning(self, message="Project URL ត្រូវចាប់ផ្តើមដោយ https://", win_title="Cloud", auto_close_ms=None)
+            return False
+        self.app.settings.set_many({
+            "cloud_supabase_url": url,
+            "cloud_supabase_key": self.cloud_key.text().strip(),
+            "cloud_auto_sync": "1" if self.cloud_auto.isChecked() else "0",
+            "cloud_sync_interval_min": self.cloud_interval.value(),
+        })
+        if hasattr(self.app, "restart_cloud_timer"):
+            self.app.restart_cloud_timer()
+        if not silent:
+            save_success_message(self, message="ការកំណត់ Cloud ត្រូវបានរក្សាទុក")
+        return True
+
+    def copy_cloud_schema(self):
+        from utils.supabase_sync import schema_sql
+        QApplication.clipboard().setText(schema_sql())
+        save_success_message(self, message="SQL ត្រូវបានចម្លង — បិទភ្ជាប់ក្នុង Supabase › SQL Editor ហើយចុច Run",
+                             auto_close_ms=None)
+
+    def _cloud_credentials_ok(self):
+        if not self.cloud_url.text().strip() or not self.cloud_key.text().strip():
+            none_selected_warning(self, message="សូមបញ្ចូល Project URL និង Secret key", win_title="Cloud")
+            return False
+        return self.save_cloud_settings(silent=True)
+
+    def _set_cloud_busy(self, busy, text=""):
+        for b in (self.cloud_test_btn, self.cloud_sync_btn, self.cloud_download_btn):
+            b.setEnabled(not busy)
+        if text:
+            self.cloud_status.setText(text)
+
+    def test_cloud_connection(self):
+        if not self._cloud_credentials_ok():
+            return
+        from utils.sync_worker import SupabaseSyncWorker
+        self._set_cloud_busy(True, "កំពុងសាកល្បង…")
+        self._cloud_worker = SupabaseSyncWorker(self.app.db, self.cloud_url.text(), self.cloud_key.text(), mode="test")
+        self._cloud_worker.sync_finished.connect(lambda _r: (
+            self._set_cloud_busy(False), self.update_cloud_status_label(),
+            save_success_message(self, message="✅ ការតភ្ជាប់ជោគជ័យ — តារាងទាំងអស់ត្រៀមរួចរាល់", auto_close_ms=None)))
+        self._cloud_worker.sync_failed.connect(lambda err: (
+            self._set_cloud_busy(False), self.update_cloud_status_label(),
+            none_selected_warning(self, message=f"❌ មិនអាចតភ្ជាប់បាន:\n{err}", win_title="Cloud", auto_close_ms=None)))
+        self._cloud_worker.start()
+
+    def cloud_sync_now(self):
+        if not self._cloud_credentials_ok():
+            return
+        self._set_cloud_busy(True, "កំពុងធ្វើសមកាលកម្ម…")
+
+        def done(results):
+            self._set_cloud_busy(False)
+            self.update_cloud_status_label()
+            total = sum(v for k, v in results.items() if not k.startswith("_") and isinstance(v, int))
+            save_success_message(self, message=f"✅ សមកាលកម្មជោគជ័យ ({total:,} ជួរ)", auto_close_ms=None)
+
+        def failed(err):
+            self._set_cloud_busy(False)
+            self.update_cloud_status_label()
+            none_selected_warning(self, message=f"❌ សមកាលកម្មបរាជ័យ:\n{err}", win_title="Cloud", auto_close_ms=None)
+
+        started = self.app.start_cloud_sync(
+            on_done=done, on_fail=failed,
+            on_progress=lambda i, n, t: self.cloud_status.setText(f"កំពុងធ្វើសមកាលកម្ម… {i + 1}/{n} ({t})"))
+        if not started:
+            self._set_cloud_busy(False, "សមកាលកម្មកំពុងដំណើរការរួចហើយ — សូមរង់ចាំ")
+
+    def cloud_download(self):
+        if not self._cloud_credentials_ok():
+            return
+        import datetime as dt
+        from utils.sync_worker import SupabaseSyncWorker
+        folder = self.get_backup_folder()
+        os.makedirs(folder, exist_ok=True)
+        out_path = os.path.join(folder, f"pos_backup_cloud_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.db")
+        self._set_cloud_busy(True, "កំពុងទាញយក…")
+
+        def done(counts):
+            self._set_cloud_busy(False)
+            self.update_cloud_status_label()
+            self.load_backup_list()
+            total = sum(v for k, v in counts.items() if not k.startswith("_") and isinstance(v, int))
+            save_success_message(
+                self, auto_close_ms=None,
+                message=f"✅ បានទាញយក {total:,} ជួរ ទៅជាឯកសារ:\n{os.path.basename(out_path)}\n\n"
+                        "ទៅផ្ទាំង 💾 បម្រុងទុក ហើយចុចពីរដងលើវា ដើម្បីស្តារ។")
+
+        def failed(err):
+            self._set_cloud_busy(False)
+            self.update_cloud_status_label()
+            if os.path.exists(out_path):
+                try:
+                    os.remove(out_path)
+                except OSError:
+                    pass
+            none_selected_warning(self, message=f"❌ ទាញយកបរាជ័យ:\n{err}", win_title="Cloud", auto_close_ms=None)
+
+        self._cloud_worker = SupabaseSyncWorker(self.app.db, self.cloud_url.text(), self.cloud_key.text(),
+                                                mode="download", out_path=out_path)
+        self._cloud_worker.sync_finished.connect(done)
+        self._cloud_worker.sync_failed.connect(failed)
+        self._cloud_worker.start()
+

@@ -27,6 +27,7 @@ class POS(QApplication):
     def __init__(self, argv):
         
         super().__init__(argv)
+        self.default_font_family = "Khmer OS Siemreap"   # fallback if the bundled font fails to load
         self.load_custom_fonts()
         self.setStyleSheet(get_app_global_style(self.default_font_family))   # ← only this one, remove the other
 
@@ -46,6 +47,12 @@ class POS(QApplication):
         self.main_window = None
 
         self.check_and_run_daily_backup()
+
+        # ---- Supabase cloud sync (optional; configured in Settings → ☁️ Cloud)
+        self._cloud_worker = None
+        self.cloud_timer = QTimer(self)
+        self.cloud_timer.timeout.connect(lambda: self.start_cloud_sync())
+        self.aboutToQuit.connect(self._wait_for_cloud_worker)
         # self._sync_worker = None 
 
         # self.setup_auto_sync()
@@ -98,7 +105,74 @@ class POS(QApplication):
         self.user = user
         self.main_window = MainWindow(self, user)
         self.main_window.show()
-        self.check_for_updates(silent=True) 
+        self.check_for_updates(silent=True)
+        self.restart_cloud_timer()
+        if self.settings.get("cloud_auto_sync", "0") == "1":
+            QTimer.singleShot(15_000, lambda: self.start_cloud_sync())   # first sync shortly after login
+
+    # ================ Supabase cloud sync =================
+    def restart_cloud_timer(self):
+        self.cloud_timer.stop()
+        if self.settings.get("cloud_auto_sync", "0") != "1":
+            return
+        try:
+            minutes = max(5, int(float(self.settings.get("cloud_sync_interval_min", 15) or 15)))
+        except ValueError:
+            minutes = 15
+        self.cloud_timer.start(minutes * 60 * 1000)
+
+    def start_cloud_sync(self, on_done=None, on_fail=None, on_progress=None):
+        """Starts a background push to Supabase. Returns False if one is already running
+        or the cloud is not configured. Never blocks the UI."""
+        url = self.settings.get("cloud_supabase_url", "")
+        key = self.settings.get("cloud_supabase_key", "")
+        if not url or not key:
+            return False
+        if self._cloud_worker is not None and self._cloud_worker.isRunning():
+            return False
+
+        from utils.sync_worker import SupabaseSyncWorker
+        import datetime as dt
+        worker = SupabaseSyncWorker(self.db, url, key, mode="push")
+        self._cloud_worker = worker
+
+        def finished(results):
+            synced_at = results.get("_synced_at", dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            total = sum(v for k, v in results.items() if not k.startswith("_") and isinstance(v, int))
+            self.settings.set_many({"cloud_last_sync_at": synced_at,
+                                    "cloud_last_result": f"✅ {total:,} ជួរ"})
+            self._show_status(f"☁️ សមកាលកម្ម Cloud ជោគជ័យ ({synced_at})")
+            if on_done:
+                on_done(results)
+
+        def failed(err):
+            now = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.settings.set("cloud_last_result", f"❌ {now}: {err[:300]}")
+            self._show_status(f"☁️ សមកាលកម្ម Cloud បរាជ័យ: {err[:120]}")
+            print(f"Cloud sync failed: {err}")
+            if on_fail:
+                on_fail(err)
+
+        worker.sync_finished.connect(finished)
+        worker.sync_failed.connect(failed)
+        if on_progress:
+            worker.progress.connect(on_progress)
+        worker.start()
+        return True
+
+    def _wait_for_cloud_worker(self):
+        # Closing the app while a background thread runs would destroy a running
+        # QThread (hard crash on exit). Wait for cloud sync / update check to finish.
+        for worker in (self._cloud_worker, getattr(self, "_update_worker", None)):
+            if worker is not None and worker.isRunning():
+                worker.wait(20_000)
+
+    def _show_status(self, text):
+        try:
+            if self.main_window:
+                self.main_window.statusBar().showMessage(text, 8000)
+        except RuntimeError:
+            pass   # window already closed
 
     def load_custom_fonts(self):
         font_path = str(resource_path("fonts/Khmer OS Siemreap Regular.ttf"))

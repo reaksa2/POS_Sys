@@ -156,8 +156,8 @@ class StockModel:
             # Log the transfer itself in stock_transfers
             cursor.execute('''
                 INSERT INTO stock_transfers
-                    (product_id, from_brand_id, to_brand_id, quantity, note, transferred_by)
-                VALUES (?, ?, ?, ?, ?, ?)
+                    (product_id, from_brand_id, to_brand_id, quantity, note, transferred_by, transferred_at)
+                VALUES (?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
             ''', (product_id, from_brand_id, to_brand_id, quantity, note, transferred_by))
 
             conn.commit()

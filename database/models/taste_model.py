@@ -36,11 +36,13 @@ class TasteModel:
 
     def delete_taste(self,id):
         conn = self.db.get_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            DELETE FROM taste WHERE id=?
-        ''',(id))
-        conn.commit()
-        conn.close()
+        try:
+            cursor = conn.cursor()
+            cursor.execute('''
+                DELETE FROM taste WHERE id=?
+            ''',(id,))   # ← must be a tuple; (id) is just an int and always crashed
+            conn.commit()
+        finally:
+            conn.close()
         
         

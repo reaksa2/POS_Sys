@@ -101,12 +101,20 @@ class StockTransferDialog(QDialog):
             if category_id is None or p['category_id'] == category_id:
                 self.product_combo.addItem(p['name'], p['id'])
 
+    def selected_product_id(self):
+        """The combo is editable: if the typed text doesn't exactly match an item,
+        currentData() still returns the PREVIOUSLY selected product, so stock was
+        adjusted on the wrong item. Resolve by the visible text instead."""
+        text = self.product_combo.currentText().strip()
+        idx = self.product_combo.findText(text, Qt.MatchFlag.MatchFixedString)
+        return self.product_combo.itemData(idx) if idx >= 0 else None
+
     def filter_products_by_category(self):
         category_id = self.category_filter_combo.currentData()
         self.load_product_combo(category_id)
 
     def confirm_transfer(self):
-        product_id = self.product_combo.currentData()
+        product_id = self.selected_product_id()
         from_brand_id = self.from_brand_combo.currentData()
         to_brand_id = self.to_brand_combo.currentData()
         quantity = self.quantity_input.value()

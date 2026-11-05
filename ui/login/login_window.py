@@ -162,14 +162,7 @@ class LoginWindow(QWidget):
             return
 
         try:
-            conn = self.app.db.get_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT * FROM users WHERE username = ? AND password = ? AND active = 1",
-                (username, password)
-            )
-            user = cursor.fetchone()
-            conn.close()
+            user = self.app.users.authenticate(username, password)
 
             if user:
                 # Save or clear remembered username based on checkbox
@@ -178,7 +171,7 @@ class LoginWindow(QWidget):
                 else:
                     self.settings.remove("remembered_username")
 
-                self.login_success.emit(dict(user))
+                self.login_success.emit(user)
             else:
                 self.status_label.setText("❌ ឈ្មោះឬពាក្យសម្ងាត់មិនត្រឹមត្រូវ! ឬគណនីត្រូវបានផ្អាក")
         except Exception as e:

@@ -5,6 +5,7 @@ from PySide6.QtCore import QMarginsF, Qt,QSizeF
 from PySide6.QtGui import QTextDocument, QPageSize, QPageLayout, QFont
 
 from .invoice_template import build_receipt_html
+from utils.printing import apply_paper_settings
 from utils.style import TABLE_STYLE,BTN_ADD,BTN_EDIT,BTN_PRINT,BTN_CANCEL,BTN_COMPLETE
 from utils.dialog import save_success_message,none_selected_warning
 class OrderDetailDialog(QDialog):
@@ -144,10 +145,7 @@ class OrderDetailDialog(QDialog):
             if saved_printer_name and saved_printer_name in available_printers:
                 printer.setPrinterName(saved_printer_name)
 
-            a5_size = QPageSize(QSizeF(148, 210), QPageSize.Millimeter, "A5 Custom")
-            printer.setPageSize(a5_size)
-            printer.setPageOrientation(QPageLayout.Portrait)
-            printer.setPageMargins(QMarginsF(8, 8, 8, 8), QPageLayout.Millimeter)
+            apply_paper_settings(printer, self.app.settings)
             doc.setPageSize(printer.pageRect(QPrinter.Point).size())
 
             preview = QPrintPreviewDialog(printer, self)

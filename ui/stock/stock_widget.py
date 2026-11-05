@@ -37,6 +37,7 @@ class StockWidget(QWidget):
 
     def refresh(self):
         self.load_brand_filter()
+        self.load_movement_brand_filter()   # new brands were missing from the history filter
         self.load_stock()
         self.load_movements()
 
@@ -175,7 +176,7 @@ class StockWidget(QWidget):
 
                 # Column 5: Unit
                
-                unit_item = QTableWidgetItem(f"{s['unit_name']}")
+                unit_item = QTableWidgetItem(s['unit_name'] or "")
                 unit_item.setTextAlignment(Qt.AlignCenter)
                 self.stock_table.setItem(row, 5, unit_item)
 
@@ -293,6 +294,7 @@ class StockWidget(QWidget):
         self.load_movements()
 
     def load_movement_brand_filter(self):
+        current = self.movement_brand_combo.currentData() if self.movement_brand_combo.count() > 0 else None
         try:
             self.movement_brand_combo.blockSignals(True)
             self.movement_brand_combo.clear()
@@ -301,6 +303,10 @@ class StockWidget(QWidget):
             brands = self.app.brand.get_brands() or []
             for b in brands:
                 self.movement_brand_combo.addItem(b["name"], b["id"])
+            if current is not None:
+                idx = self.movement_brand_combo.findData(current)
+                if idx >= 0:
+                    self.movement_brand_combo.setCurrentIndex(idx)
         except Exception as e:
             print("Load movement brand filter error:", e)
         finally:
@@ -347,29 +353,3 @@ class StockWidget(QWidget):
             self.movement_table.setSortingEnabled(True)
         except Exception as e:
             print("Load movements error:", e)
-
-
-    def confirm_adjustment(self):
-        brand_id = self.brand_combo.currentData()
-        product_id = self.product_combo.currentData()
-        quantity = self.quantity_input.value()
-        reason = self.reason_input.text().strip()
-
-        if not brand_id or not product_id:
-            QMessageBox.warning(self, "Error", "សូមជ្រើសរើសសាខា និងផលិតផល")
-            return
-        if quantity <= 0:
-            QMessageBox.warning(self, "Error", "ចំនួនត្រូវតែធំជាងសូន្យ")
-            return
-
-        try:
-            user_id = self.app.user.get('id') if hasattr(self.app, 'user') else None
-            self.app.stock.adjust_stock(
-                product_id=product_id, brand_id=brand_id,
-                movement_type=self.movement_type, quantity=quantity,
-                reason=reason or ("បញ្ចូលស្តុក" if self.movement_type == 'in' else "ដកស្តុក"),
-                created_by=user_id
-            )
-            self.accept()
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to adjust stock: {e}")

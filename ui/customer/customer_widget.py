@@ -75,7 +75,7 @@ class CustomerWidget(QWidget):
                 self.table.setItem(row, 3, QTableWidgetItem(customer['facebook'] or ""))
                 self.table.setItem(row, 4, QTableWidgetItem(customer['telegram'] or ""))
                 self.table.setItem(row, 5, QTableWidgetItem(customer['type'] or "New"))
-                self.table.setItem(row, 6, QTableWidgetItem(customer['address']))
+                self.table.setItem(row, 6, QTableWidgetItem(customer['address'] or ""))
             self.table.setColumnHidden(0,True)
         except Exception as e:
             # QMessageBox.warning(self, "Database Error", f"Could not load customers:\n{str(e)}")
@@ -103,22 +103,23 @@ class CustomerWidget(QWidget):
                     save_success_message(self,message="អតិថិជនថ្មីត្រូវបានបន្ថែម")
                 except Exception as e:
                     
-                    none_selected_warning(self,message="ការបន្ថែមមានបញ្ហា \n{str(e)}")
+                    none_selected_warning(self,message=f"ការបន្ថែមមានបញ្ហា (លេខទូរស័ព្ទអាចមានរួចហើយ)\n{e}", auto_close_ms=None)
             else:
                 
                 none_selected_warning(self,message="ឈ្មោះអតិថិជន និងលេខទូរស័ព្ទ ត្រូវបានទាមទារ",win_title="មានកំហុសឆ្គង")
     def edit_customer(self, index):
         row = index.row()
-        customer_id = int(self.table.item(row, 0).text())
+        customer_id = self.table.item(row, 0).data(Qt.UserRole)
 
-        data = {
-            "name": self.table.item(row, 1).text(),
-            "phone": self.table.item(row, 2).text(),
-            "address": self.table.item(row, 3).text(),
-            "facebook": self.table.item(row, 4).text(),
-            "telegram": self.table.item(row, 5).text(),
-            "type": self.table.item(row, 6).text(),
-        }
+        # Load straight from the DB. Reading the table cells used the wrong column
+        # order (address<-facebook, facebook<-telegram, telegram<-type, type<-address)
+        # so every edit+save scrambled the customer's details.
+        customer = self.app.cust.get_customer_by_id(customer_id)
+        if not customer:
+            none_selected_warning(self, message="រកមិនឃើញអតិថិជន")
+            return
+        customer = dict(customer)
+        data = {k: (customer.get(k) or "") for k in ("name", "phone", "address", "facebook", "telegram", "type")}
 
         dialog = CustomerDialog(self, "Edit Customer", data)
         if dialog.exec() == QDialog.Accepted:
@@ -129,7 +130,9 @@ class CustomerWidget(QWidget):
                     self.load_customers_from_db()
                     save_success_message(self,message="ព័ត៌មានអតិថិជនត្រូវបានកែប្រែ")
                 except Exception as e:
-                    QMessageBox.warning(self, "Error", str(e))
+                    none_selected_warning(self, message=f"ការកែប្រែមានបញ្ហា (លេខទូរស័ព្ទអាចមានរួចហើយ)\n{e}", auto_close_ms=None)
+            else:
+                none_selected_warning(self, message="ឈ្មោះអតិថិជន និងលេខទូរស័ព្ទ ត្រូវបានទាមទារ", win_title="មានកំហុសឆ្គង")
 
     def delete_selected(self):
         selected = self.table.selectedItems()

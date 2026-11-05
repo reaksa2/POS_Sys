@@ -58,8 +58,8 @@ class BrandModel:
                 else:
                     # INSERT
                     cursor.execute("""
-                        INSERT INTO brands (name, phone, telegram, facebook, address)
-                        VALUES (?, ?, ?, ?, ?)
+                        INSERT INTO brands (name, phone, telegram, facebook, address, created_at)
+                        VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'))
                     """, (
                         name,
                         b.get("phone", ""),

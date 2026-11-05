@@ -33,7 +33,7 @@ class CustomerModel:
             cursor.execute('''
                 INSERT INTO customers (name, phone, address, facebook, telegram, type)
                 VALUES (?, ?, ?, ?, ?, ?)
-            ''', (data['name'], data['phone'], data['address'],
+            ''', (data['name'], (data.get('phone') or '').strip() or None, data['address'],
                 data['facebook'], data['telegram'], data['type']))
             conn.commit()
             return cursor.lastrowid   # ← this was missing
@@ -47,7 +47,7 @@ class CustomerModel:
             UPDATE customers 
             SET name=?, phone=?, address=?, facebook=?, telegram=?, type=?
             WHERE id=?
-        ''', (data['name'], data['phone'], data['address'],
+        ''', (data['name'], (data.get('phone') or '').strip() or None, data['address'],
               data['facebook'], data['telegram'], data['type'], customer_id))
         conn.commit()
         conn.close()

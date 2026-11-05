@@ -5,7 +5,8 @@ from PySide6.QtGui import QImage
 from utils.utils import to_float, resource_path
 
 TEMPLATE_DIR = resource_path("ui/order")
-env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
+# autoescape: a customer name like "A & B <VIP>" no longer breaks the receipt HTML
+env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), autoescape=True)
 
 
 def get_image_html(path, target_width=60):
@@ -46,10 +47,23 @@ def build_receipt_html(app, order, items):
     order_dict.setdefault('facebook', '')
     order_dict.setdefault('address', '')
 
+    # Brands now live in the `brands` table (the old "business_brands" JSON setting is
+    # no longer written, so receipts showed no brand info). Show the order's own
+    # brand when known, otherwise all active brands.
     try:
-        brands = json.loads(biz.get("business_brands", "[]") or "[]")
+        brands = app.brand.get_brands()
     except Exception:
         brands = []
+    if not brands:
+        try:
+            brands = json.loads(biz.get("business_brands", "[]") or "[]")
+        except Exception:
+            brands = []
+    order_brand_id = order_dict.get('brand_id')
+    if order_brand_id:
+        own = [b for b in brands if b.get('id') == order_brand_id]
+        if own:
+            brands = own
 
     template = env.get_template("receipt.html")
     try:

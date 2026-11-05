@@ -27,8 +27,8 @@ class SettingsModel:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO settings (key, value, updated_at)
-                VALUES (?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+                VALUES (?, ?, datetime('now', 'localtime'))
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now', 'localtime')
             ''', (key, str(value)))
             conn.commit()
         finally:
@@ -41,8 +41,8 @@ class SettingsModel:
             for key, value in data.items():
                 cursor.execute('''
                     INSERT INTO settings (key, value, updated_at)
-                    VALUES (?, ?, CURRENT_TIMESTAMP)
-                    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+                    VALUES (?, ?, datetime('now', 'localtime'))
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now', 'localtime')
                 ''', (key, str(value)))
             conn.commit()
         finally:

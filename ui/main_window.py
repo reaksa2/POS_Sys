@@ -26,7 +26,8 @@ class MainWindow(QMainWindow):
         self.stack = None
         self.menu_buttons = {}
 
-        self.setWindowTitle(f"{self.app.settings.get("business_name","POS")} - {user.get('name', 'Admin')}")
+        business_name = self.app.settings.get("business_name", "POS") or "POS"
+        self.setWindowTitle(f"{business_name} - {user.get('name', 'Admin')}")
         self.showMaximized()
 
         central = QWidget()
@@ -69,7 +70,7 @@ class MainWindow(QMainWindow):
         about_btn.clicked.connect(lambda: self.load_page("អំពីប្រព័ន្ធ"))
         about_btn.setStyleSheet("padding: 16px 20px; font-size: 16px;")
         sidebar_layout.addWidget(about_btn)
-        self.menu_buttons["About"] = about_btn
+        self.menu_buttons["អំពីប្រព័ន្ធ"] = about_btn   # key must match the page name used in load_page
 
         main_layout.addWidget(sidebar)
 
@@ -140,7 +141,7 @@ class MainWindow(QMainWindow):
             if hasattr(self.app, 'show_login'):
                 self.app.show_login()
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to delete customer: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to log out: {e}")
             
 
     def on_page_changed(self, index):
@@ -252,7 +253,7 @@ class MainWindow(QMainWindow):
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(subtitle)
 
-        version = QLabel("Version 1.5.2")
+        version = QLabel("Version 1.6.0")
         version.setStyleSheet("font-size: 13px; color: #666;")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(version)
@@ -268,11 +269,15 @@ class MainWindow(QMainWindow):
         layout.addWidget(divider)
 
         # ==================== WHAT'S NEW ====================
-        whats_new_title = QLabel("✨ លក្ខណៈពិសេសថ្មី — v1.5.2")
+        whats_new_title = QLabel("✨ លក្ខណៈពិសេសថ្មី — v1.6.0")
         whats_new_title.setStyleSheet("font-size: 16px; font-weight: bold; color: #22C55E; margin-top: 6px;")
         layout.addWidget(whats_new_title)
 
         whats_new_items = [
+            "☁️ បម្រុងទុកទិន្នន័យលើ Cloud (Supabase) ដោយស្វ័យប្រវត្តិ និងទាញយកមកស្តារវិញ",
+            "🔐 ពាក្យសម្ងាត់ត្រូវបានរក្សាទុកដោយសុវត្ថិភាព (hash)",
+            "🖨️ ទំហំក្រដាសបោះពុម្ព (A5 / A4 / 80mm) ដំណើរការពិតប្រាកដ",
+            "🐞 កែកំហុសជាច្រើន៖ កែប្រែអតិថិជន, ការកម្មង់, ស្តុក, ម៉ោងប្រវត្តិស្តុក, ពិនិត្យកំណែថ្មី",
             "គ្រប់គ្រងស្តុកទំនិញ (Stock In / Out / ផ្ទេររវាងសាខា) ដោយឡែកតាមម៉ាកយីហោ",
             "ត្រងទំនិញតាមប្រភេទ និងស្វែងរកឈ្មោះក្នុងប្រអប់ជ្រើសរើសបានលឿន",
             "ការការពារលក់លើសស្តុក (ការកម្មង់, កែសម្រួលបរិមាណ, បញ្ជាទិញ)",

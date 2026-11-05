@@ -9,6 +9,7 @@ from PySide6.QtGui import QTextDocument, QPageSize, QPageLayout, QFont,QColor,QK
 from PySide6.QtCore import QMarginsF, Qt,QSizeF,QDateTime
 
 from utils.utils import (to_float)
+from utils.printing import apply_paper_settings
 from ..customer.customer_dialog import CustomerDialog
 from .order_detail_dialog import OrderDetailDialog
 from .invoice_preview_dialog import InvoicePreviewDialog
@@ -65,7 +66,7 @@ class OrderWidget(QWidget):
         self.end_date_filter.setCalendarPopup(True)
         self.end_date_filter.setDisplayFormat("yyyy-MM-dd HH:mm")
         self.end_date_filter.setStyleSheet(self._spinbox_style())
-        self.end_date_filter.dateTimeChanged.connect(self.load_history)
+        self.end_date_filter.dateTimeChanged.connect(self._on_end_date_changed)
         self.end_date_filter.setMinimumWidth(150)
         self.end_date_filter.setStyleSheet("border: 1px solid #444;border-radius:8px;background-color:#1F1F1F")
        
@@ -95,18 +96,19 @@ class OrderWidget(QWidget):
         
 
     def refresh(self):
+        self._cached_default_brand_id = None   # reset first, so products load for the current brand list
         self.load_products()
         self.load_category_filter()
         self.load_tastes()
         self.refresh_order_table()
         self.load_order_lists()
-        self.load_history()
         self.load_customers()
-        self.load_defaults()
-        self._cached_default_brand_id = None   # ← confirm this line exists, resets cache on every page revisit
-    def load_order_lists(self):
-        active = self.app.order.get_orders("pending")
-        self.populate_orders_table(self.active_orders_table, active)
+        if not self.editing_order_id and not self.current_items:
+            self.load_defaults()   # don't wipe delivery/discount of an order the user is still building
+
+    def _on_end_date_changed(self, *args):
+        self._end_date_manually_set = True
+        self.load_history()
     def tab_ordering_setup(self):
         tab_ordering = QHBoxLayout(self.tab_ordering)
         table_font = QFont()
@@ -525,11 +527,16 @@ class OrderWidget(QWidget):
 
     def load_customers(self):
         try:
+            selected = self.customer_combo.currentData()   # keep the selection when the page is revisited
             customers = self.app.cust.get_customer_name()
             self.customer_combo.clear()
             self.customer_combo.addItem("អតិថិជន", None)
             for c in customers:
                 self.customer_combo.addItem(c['name'], c['id'])
+            if selected is not None:
+                idx = self.customer_combo.findData(selected)
+                if idx >= 0:
+                    self.customer_combo.setCurrentIndex(idx)
         except Exception as e:
             print("DB Error", e)
             self.customer_combo.addItem("Walk-in Customer", None)
@@ -579,6 +586,8 @@ class OrderWidget(QWidget):
 
     def get_available_stock(self, product_id):
         """Returns the tracked stock quantity for this product under the current brand, or None if untracked."""
+        if not product_id:
+            return None
         brand_id = self.app.user.get('brand_id') if hasattr(self.app, 'user') else None
         if not brand_id:
             brand_id = self.get_default_brand_id()
@@ -703,6 +712,13 @@ class OrderWidget(QWidget):
 
         self.total_label.setText(line1)
 
+        # If status is "paid", the paid amount must follow the total (items/discount/delivery may change later)
+        if hasattr(self, 'payment_status_combo') and self.payment_status_combo.currentText() == "paid":
+            if abs(self.paid_amount_input.value() - total) > 0.0001:
+                self.paid_amount_input.blockSignals(True)
+                self.paid_amount_input.setValue(total)
+                self.paid_amount_input.blockSignals(False)
+
     def on_order_item_changed(self, item):
         row = item.row()
         col = item.column()
@@ -711,7 +727,7 @@ class OrderWidget(QWidget):
 
         if col == 4:  # Qty
             try:
-                new_qty = float(item.text())
+                new_qty = float(item.text().replace(',', ''))
                 if new_qty <= 0:
                     raise ValueError
 
@@ -811,6 +827,7 @@ class OrderWidget(QWidget):
             "payment_status": self.payment_status_combo.currentText(),
             "paid_amount": self.paid_amount_input.value(),
             "pickup_time": self.pickup_time_input.dateTime().toString("yyyy-MM-dd HH:mm"),
+            "brand_id": (self.app.user.get('brand_id') if hasattr(self.app, 'user') else None) or self.get_default_brand_id(),
         }
         preview_items = [
             {"product_name": i['name'], "taste": i['taste'], "unit": i['unit'],
@@ -943,6 +960,7 @@ class OrderWidget(QWidget):
             print("Load defaults error:", e)
 
     def clear_order(self):
+        self.editing_order_id = None
         self.current_items.clear()
         self.load_defaults()   # resets delivery + discount to saved settings
         self.payment_method_combo.setCurrentIndex(0)
@@ -950,15 +968,6 @@ class OrderWidget(QWidget):
         self.paid_amount_input.setValue(0)
         self.pickup_time_input.setDateTime(QDateTime.currentDateTime())
         self.refresh_order_table()
-
-    def load_defaults(self):
-        try:
-            delivery = float(self.app.settings.get("default_delivery", 0) or 0)
-            discount = float(self.app.settings.get("default_discount", 0) or 0)
-            self.delivery_input.setValue(delivery)
-            self.discount.setValue(discount)
-        except Exception as e:
-            print("Load defaults error:", e)
 
     def on_payment_status_changed(self, status):
         self.paid_amount_input.setEnabled(status == "deposit")
@@ -1002,9 +1011,8 @@ class OrderWidget(QWidget):
 
     def load_order_lists(self):
         active = self.app.order.get_orders("pending")
-        history = self.app.order.get_orders_history()
         self.populate_orders_table(self.active_orders_table, active)
-        self.populate_orders_table(self.history_orders_table, history)
+        self.load_history()   # history respects the date filter + updates the summary label
 
     def populate_orders_table(self, table, orders):
         table.setSortingEnabled(False)
@@ -1047,17 +1055,16 @@ class OrderWidget(QWidget):
         order_id = table.item(row, 0).data(Qt.UserRole)
         dialog = OrderDetailDialog(self, self.app, order_id)
         dialog.exec()
-        print(f"DEBUG after exec: dialog.status_changed = {dialog.status_changed}")   # ← temp
         if dialog.status_changed:
-            self.load_products() 
+            self.load_products()
             self.load_order_lists()
-            self.load_history()
-        else:
-            print("DEBUG: status_changed was False, skipping refresh")   # ← temp
 
     def add_new_customer(self):
         dialog = CustomerDialog(self)
         if dialog.exec() == QDialog.Accepted and dialog.get_data():
+            if not dialog.get_data()["name"] or not dialog.get_data()["phone"]:
+                none_selected_warning(self, message="ឈ្មោះអតិថិជន និងលេខទូរស័ព្ទ ត្រូវបានទាមទារ", win_title="មានកំហុសឆ្គង")
+                return
             try:
                 new_id = self.app.cust.add_customer(dialog.get_data())
                 self.load_customers()
@@ -1086,7 +1093,7 @@ class OrderWidget(QWidget):
                 item = dict(it)   # convert Row → dict
 
                 self.current_items.append({
-                    "price_id": item.get('product_id') or item.get('id') or 0,
+                    "price_id": item.get('product_id') or None,
                     "name": item.get('product_name') or item.get('name') or "",
                     "taste": item.get('taste') or "",
                     "unit": item.get('unit') or "",
@@ -1176,10 +1183,7 @@ class OrderWidget(QWidget):
 
             printer.setPrinterName(target_printer_name)
 
-            a5_size = QPageSize(QSizeF(148, 210), QPageSize.Millimeter, "A5 Custom")
-            printer.setPageSize(a5_size)
-            printer.setPageOrientation(QPageLayout.Portrait)
-            printer.setPageMargins(QMarginsF(8, 8, 8, 8), QPageLayout.Millimeter)
+            apply_paper_settings(printer, self.app.settings)
             doc.setPageSize(printer.pageRect(QPrinter.Point).size())
 
             success = doc.print_(printer)
@@ -1216,10 +1220,7 @@ class OrderWidget(QWidget):
             doc.setHtml(html)
 
             printer = QPrinter(QPrinter.HighResolution)
-            a5_size = QPageSize(QSizeF(148, 210), QPageSize.Millimeter, "A5 Custom")
-            printer.setPageSize(a5_size)
-            printer.setPageOrientation(QPageLayout.Portrait)
-            printer.setPageMargins(QMarginsF(8, 8, 8, 8), QPageLayout.Millimeter)
+            page_size = apply_paper_settings(printer, self.app.settings)
 
             page_rect = printer.pageRect(QPrinter.Point)
             doc.setPageSize(page_rect.size())
@@ -1227,7 +1228,7 @@ class OrderWidget(QWidget):
             preview = QPrintPreviewDialog(printer, self)
 
             def paint(p):
-                p.setPageSize(a5_size)
+                p.setPageSize(page_size)
                 p.setPageOrientation(QPageLayout.Portrait)
                 doc.setPageSize(p.pageRect(QPrinter.Point).size())
                 doc.print_(p)

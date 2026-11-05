@@ -1,15 +1,39 @@
 import sqlite3
+import sys
 from pathlib import Path
 from datetime import datetime
 
+from utils.auth import hash_password, is_hashed
+
+
+def _app_base_dir():
+    """Folder that holds database/pos.db.
+
+    Previously the path was relative to the *current working directory*, so
+    starting POS.exe from a shortcut / taskbar pin with a different "Start in"
+    folder silently created a brand-new empty database somewhere else.
+    Now it is always next to POS.exe (or the project root when run from source).
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
 class DatabaseManager:
+    _initialized_paths = set()   # run schema creation/migrations once per process
+
     def __init__(self):
-        self.db_path = Path("database/pos.db")
-        self.db_path.parent.mkdir(exist_ok=True)
-        self.init_db()
+        self.db_path = _app_base_dir() / "database" / "pos.db"
+        legacy_path = Path.cwd() / "database" / "pos.db"
+        if not self.db_path.exists() and legacy_path.exists():
+            self.db_path = legacy_path   # keep using an existing DB from the old location
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        if str(self.db_path) not in DatabaseManager._initialized_paths:
+            self.init_db()
+            DatabaseManager._initialized_paths.add(str(self.db_path))
 
     def get_connection(self):
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=10)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON;")   # Enable relationships
         return conn
@@ -162,7 +186,7 @@ class DatabaseManager:
                 product_id INTEGER NOT NULL,
                 brand_id INTEGER NOT NULL,
                 quantity REAL NOT NULL DEFAULT 0,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT (datetime('now', 'localtime')),
                 FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
                 FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE,
                 UNIQUE(product_id, brand_id)
@@ -181,7 +205,7 @@ class DatabaseManager:
                 reason TEXT,                       -- e.g. 'Purchase', 'Sale', 'Adjustment', 'Damaged'
                 reference_order_id INTEGER,        -- links to orders.id if it's a sale-driven 'out'
                 created_by INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMP DEFAULT (datetime('now', 'localtime')),
                 FOREIGN KEY (product_id) REFERENCES products(id),
                 FOREIGN KEY (brand_id) REFERENCES brands(id),
                 FOREIGN KEY (reference_order_id) REFERENCES orders(id),
@@ -198,7 +222,7 @@ class DatabaseManager:
                 facebook TEXT,
                 address TEXT,
                 is_active INTEGER DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT (datetime('now', 'localtime'))
             )
         ''')
         cursor.execute('''
@@ -210,7 +234,7 @@ class DatabaseManager:
                 quantity REAL NOT NULL,
                 note TEXT,
                 transferred_by INTEGER,
-                transferred_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                transferred_at TIMESTAMP DEFAULT (datetime('now', 'localtime')),
                 FOREIGN KEY (product_id) REFERENCES products(id),
                 FOREIGN KEY (from_brand_id) REFERENCES brands(id),
                 FOREIGN KEY (to_brand_id) REFERENCES brands(id),
@@ -219,14 +243,40 @@ class DatabaseManager:
         ''')
         # Insert demo data
         self._insert_demo_data(cursor)
+        self._migrate_plaintext_passwords(cursor)
+        self._migrate_utc_timestamps(cursor)
         conn.commit()
         conn.close()
+
+    def _migrate_utc_timestamps(self, cursor):
+        """One-time fix: older versions stored stock/brand timestamps in UTC
+        (CURRENT_TIMESTAMP) while orders used local time. Convert the old rows
+        to local time so history filters ("today", "this week") line up."""
+        flag = "migration_local_time_v1"
+        cursor.execute("SELECT 1 FROM settings WHERE key = ?", (flag,))
+        if cursor.fetchone():
+            return
+        for table, col in (("stock_movements", "created_at"), ("stock_transfers", "transferred_at"),
+                           ("stock", "updated_at"), ("brands", "created_at")):
+            cursor.execute(f"UPDATE {table} SET {col} = datetime({col}, 'localtime') WHERE {col} IS NOT NULL")
+        cursor.execute("INSERT INTO settings (key, value) VALUES (?, '1')", (flag,))
+
+    def _migrate_plaintext_passwords(self, cursor):
+        """Upgrade any plain-text passwords to salted hashes (one-time, automatic)."""
+        cursor.execute("SELECT id, password FROM users")
+        for row in cursor.fetchall():
+            pwd = row['password']
+            if pwd and not is_hashed(pwd):
+                cursor.execute("UPDATE users SET password = ? WHERE id = ?", (hash_password(pwd), row['id']))
 
     def _insert_demo_data(self, cursor):
         # Users
         cursor.execute("SELECT COUNT(*) as count FROM users")
         if cursor.fetchone()['count'] == 0:
-            cursor.execute("INSERT INTO users (username, password, role, name) VALUES ('admin', 'admin123', 'Owner', 'Administrator')")
+            cursor.execute(
+                "INSERT INTO users (username, password, role, name) VALUES ('admin', ?, 'Owner', 'Administrator')",
+                (hash_password('admin123'),)
+            )
 
         # Categories
         cursor.execute("SELECT COUNT(*) as count FROM categories")

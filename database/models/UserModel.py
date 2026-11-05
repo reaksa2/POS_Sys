@@ -1,3 +1,6 @@
+from utils.auth import hash_password, verify_password
+
+
 class UserModel:
     def __init__(self, db):
         self.db = db
@@ -24,7 +27,7 @@ class UserModel:
             cursor.execute('''
                 INSERT INTO users (username, password, role, name, brand_id, active)
                 VALUES (?, ?, ?, ?, ?, 1)
-            ''', (data['username'], data['password'], data['role'], data['name'], data.get('brand_id')))
+            ''', (data['username'], hash_password(data['password']), data['role'], data['name'], data.get('brand_id')))
             conn.commit()
             return cursor.lastrowid
         finally:
@@ -56,7 +59,22 @@ class UserModel:
         conn = self.db.get_connection()
         try:
             cursor = conn.cursor()
-            cursor.execute("UPDATE users SET password = ? WHERE id = ?", (new_password, user_id))
+            cursor.execute("UPDATE users SET password = ? WHERE id = ?", (hash_password(new_password), user_id))
             conn.commit()
+        finally:
+            conn.close()
+
+    def authenticate(self, username, password):
+        """Returns the user row as a dict (without the password) or None."""
+        conn = self.db.get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM users WHERE username = ? AND active = 1", (username,))
+            row = cursor.fetchone()
+            if not row or not verify_password(password, row['password']):
+                return None
+            user = dict(row)
+            user.pop('password', None)
+            return user
         finally:
             conn.close()

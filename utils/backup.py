@@ -1,5 +1,6 @@
 import os
 import shutil
+import sqlite3
 import glob
 from datetime import datetime
 
@@ -19,7 +20,15 @@ def backup_database(db_path, backup_folder, keep_last=10):
     backup_filename = f"pos_backup_{timestamp}.db"
     backup_path = os.path.join(backup_folder, backup_filename)
 
-    shutil.copy2(db_path, backup_path)
+    # Use SQLite's online-backup API instead of a raw file copy: it produces a
+    # consistent snapshot even if the app is writing at the same moment.
+    src = sqlite3.connect(db_path)
+    dst = sqlite3.connect(backup_path)
+    try:
+        src.backup(dst)
+    finally:
+        dst.close()
+        src.close()
 
     # Clean up old backups, keep only the most recent N
     _cleanup_old_backups(backup_folder, keep_last)

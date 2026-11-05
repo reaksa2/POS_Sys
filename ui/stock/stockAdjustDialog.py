@@ -92,13 +92,21 @@ class StockAdjustDialog(QDialog):
             if category_id is None or p['category_id'] == category_id:
                 self.product_combo.addItem(p['name'], p['id'])
 
+    def selected_product_id(self):
+        """The combo is editable: if the typed text doesn't exactly match an item,
+        currentData() still returns the PREVIOUSLY selected product, so stock was
+        adjusted on the wrong item. Resolve by the visible text instead."""
+        text = self.product_combo.currentText().strip()
+        idx = self.product_combo.findText(text, Qt.MatchFlag.MatchFixedString)
+        return self.product_combo.itemData(idx) if idx >= 0 else None
+
     def filter_products_by_category(self):
         category_id = self.category_filter_combo.currentData()
         self.load_product_combo(category_id)
 
     def confirm_adjustment(self):
         brand_id = self.brand_combo.currentData()
-        product_id = self.product_combo.currentData()
+        product_id = self.selected_product_id()
         quantity = self.quantity_input.value()
         reason = self.reason_input.text().strip()
 
@@ -108,6 +116,13 @@ class StockAdjustDialog(QDialog):
         if quantity <= 0:
             none_selected_warning(self, message="ចំនួនត្រូវតែធំជាងសូន្យ", win_title="មានកំហុស")
             return
+        if self.movement_type == 'out':
+            available = self.app.stock.get_stock(product_id, brand_id)
+            if quantity > available:
+                none_selected_warning(
+                    self, message=f"ស្តុកមិនគ្រប់គ្រាន់ (មាន {available:,.2f}, ស្នើ {quantity:,.2f})",
+                    win_title="ស្តុកមិនគ្រប់គ្រាន់", auto_close_ms=None)
+                return
 
         try:
             user_id = self.app.user.get('id') if hasattr(self.app, 'user') else None

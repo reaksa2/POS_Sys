@@ -2,7 +2,7 @@ import requests
 from PySide6.QtCore import QThread, Signal
 
 
-CURRENT_VERSION = "V1.5.2"   # ← update this each time you release
+CURRENT_VERSION = "V1.6.0"   # ← update this each time you release
 GITHUB_REPO = "reaksa2/POS_Sys"   # your repo
 
 
@@ -13,7 +13,7 @@ def get_latest_version_info():
     response.raise_for_status()
     data = response.json()
 
-    latest_version = data.get("tag_name", "").lstrip("v")
+    latest_version = data.get("tag_name", "").lstrip("vV")
     release_notes = data.get("body", "")
 
     download_url = ""
@@ -28,6 +28,9 @@ def get_latest_version_info():
 def is_newer_version(latest, current):
     """Simple version comparison, e.g. '1.4.0' > '1.3.0'"""
     def parse(v):
+        # Strip a leading "v"/"V" first — "V1.5.2" used to parse as (5, 2),
+        # which is never smaller than a real release like (1, 6, 0).
+        v = str(v).strip().lstrip("vV")
         return tuple(int(x) for x in v.split(".") if x.isdigit())
     try:
         return parse(latest) > parse(current)

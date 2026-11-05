@@ -342,7 +342,7 @@ class OrderModel:
             cursor.execute('''
                 SELECT DATE(created_at) as day, SUM(total_amount) as revenue, COUNT(*) as order_count
                 FROM orders
-                WHERE status = 'completed' AND DATE(created_at) >= DATE('now', ?)
+                WHERE status = 'completed' AND DATE(created_at) >= DATE('now', 'localtime', ?)
                 GROUP BY DATE(created_at)
                 ORDER BY day ASC
             ''', (f'-{days-1} days',))

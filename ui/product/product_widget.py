@@ -3,6 +3,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem, QHBoxLayout, QLineEdit, QTabWidget,QDialog, QMessageBox,
     QHeaderView, QMessageBox
 )
+import sqlite3
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from utils.utils import (to_float)
@@ -364,7 +365,7 @@ class ProductWidget(QWidget):
                 unit_id.setData(Qt.UserRole,unit['id'])
                 self.unit_table.setItem(row,0,unit_id)
                 self.unit_table.setItem(row,1,QTableWidgetItem(unit["name"]))
-                self.unit_table.setItem(row,2,QTableWidgetItem(unit["description"]))
+                self.unit_table.setItem(row,2,QTableWidgetItem(unit["description"] or ""))
             self.unit_table.setColumnHidden(0,True)
 
 
@@ -415,7 +416,7 @@ class ProductWidget(QWidget):
                 taste_id.setData(Qt.UserRole,taste['id'])
                 self.taste_table.setItem(row,0,taste_id)
                 self.taste_table.setItem(row,1,QTableWidgetItem(taste["name"]))
-                self.taste_table.setItem(row,2,QTableWidgetItem(taste["description"]))
+                self.taste_table.setItem(row,2,QTableWidgetItem(taste["description"] or ""))
 
             self.taste_table.setColumnHidden(0,True)
 
@@ -467,11 +468,18 @@ class ProductWidget(QWidget):
 
         if confirm_delete(self, f"តើអ្នកពិតជាចង់លុបប្រភេទទំនិញ {len(selected_rows)} ជួរមែនទេ?"):
             try:
+                in_use = []
                 for row in sorted(selected_rows, reverse=True):
                     cate_id = self.cate_table.item(row, 0).data(Qt.UserRole)
-                    self.app.cate.delete_category(cate_id)
-                    self.cate_table.removeRow(row)
-                save_success_message(self, "ប្រភេទទំនិញត្រូវបានលុបចេញ")
+                    try:
+                        self.app.cate.delete_category(cate_id)
+                        self.cate_table.removeRow(row)
+                    except sqlite3.IntegrityError:
+                        in_use.append(self.cate_table.item(row, 1).text())
+                if in_use:
+                    none_selected_warning(self, "មិនអាចលុបបានទេ ព្រោះកំពុងប្រើដោយទំនិញ:\n" + "\n".join(in_use), win_title="កំពុងប្រើប្រាស់", auto_close_ms=None)
+                else:
+                    save_success_message(self, "ប្រភេទទំនិញត្រូវបានលុបចេញ")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to delete categories: {e}")
 
@@ -485,11 +493,18 @@ class ProductWidget(QWidget):
 
         if confirm_delete(self, f"តើអ្នកពិតជាចង់លុបឯកតាទំនិញ {len(selected_rows)} ជួរមែនទេ?"):
             try:
+                in_use = []
                 for row in sorted(selected_rows, reverse=True):
                     unit_id = self.unit_table.item(row, 0).data(Qt.UserRole)
-                    self.app.unit.delete_unit(unit_id)
-                    self.unit_table.removeRow(row)
-                save_success_message(self, "ឯកតាទំនិញត្រូវបានលុបចេញ")
+                    try:
+                        self.app.unit.delete_unit(unit_id)
+                        self.unit_table.removeRow(row)
+                    except sqlite3.IntegrityError:
+                        in_use.append(self.unit_table.item(row, 1).text())
+                if in_use:
+                    none_selected_warning(self, "មិនអាចលុបបានទេ ព្រោះកំពុងប្រើដោយទំនិញ:\n" + "\n".join(in_use), win_title="កំពុងប្រើប្រាស់", auto_close_ms=None)
+                else:
+                    save_success_message(self, "ឯកតាទំនិញត្រូវបានលុបចេញ")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to delete units: {e}")
 

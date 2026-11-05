@@ -26,7 +26,6 @@ def resource_path(relative_path):
 
 
 
-@staticmethod
 def to_float(text, default=0.0):
     if not text:
         return default
