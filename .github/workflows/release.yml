@@ -1,0 +1,51 @@
+# Builds POS.exe on Windows and publishes it as a GitHub Release
+# whenever a version tag (e.g. V1.6.0) is pushed. The in-app update
+# checker looks for the .exe attached to the latest release.
+name: Build & Release POS.exe
+
+on:
+  push:
+    tags: ["V*", "v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install PySide6==6.11.1 matplotlib==3.11.1 Jinja2==3.1.6 requests==2.34.2 pyinstaller==6.22.1
+
+      - name: Build POS.exe
+        run: >
+          pyinstaller --noconfirm --onefile --windowed --name POS
+          --collect-all PySide6 --collect-all matplotlib
+          --add-data "ui/order/receipt.html;ui/order"
+          --add-data "resources;resources"
+          --add-data "fonts;fonts"
+          --add-data "logo.ico;."
+          --add-data "logo.png;."
+          --icon "logo.ico" main.py
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: POS-exe
+          path: dist/POS.exe
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/POS.exe
+          body_path: CHANGES.md
