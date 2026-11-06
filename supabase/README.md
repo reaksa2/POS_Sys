@@ -33,5 +33,8 @@ then restart the app. Your users and passwords come back too.
   active, but if the PC is off for a long holiday you may need to click "Restore project"
   in the Supabase dashboard. Free projects have no automatic Supabase backups — keep the
   local daily backup turned on as well.
-- One POS computer per Supabase project. (Two shops pushing to the same project would
-  overwrite each other's rows, because ids come from each local database.)
+- **One POS computer per Supabase project.** One computer with several brands/branches is fine.
+  A second computer (or a new, empty install) is blocked from syncing to a project that another POS
+  already uses, so it can't overwrite or wipe that data. Moving to a new PC: Download from Cloud →
+  restore that backup → the new PC takes over. A separate shop/PC needs its own Supabase project.
+- Use the **secret** key (`sb_secret_…`), not the publishable/anon key — the POS warns you if you paste the wrong one.

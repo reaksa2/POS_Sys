@@ -95,6 +95,32 @@ class CloudSyncError(Exception):
     pass
 
 
+# One Supabase project = one POS computer. A marker row in the cloud `settings`
+# table (negative id, never used locally) records which installation owns it.
+OWNER_ROW_ID = -100
+OWNER_KEY = "__pos_owner"
+OWNER_MESSAGE = ("This Supabase project is already used by ANOTHER POS computer, so syncing from here "
+                 "would overwrite or delete its data. Sync was stopped - nothing was changed. "
+                 "If this PC replaces the old one: use 'Download from Cloud' and restore that backup first. "
+                 "If it is a separate shop/PC: create a new Supabase project for it.")
+
+
+def local_install_id(db):
+    """Random id of this POS installation (private setting, created once)."""
+    import uuid
+    conn = db.get_connection()
+    try:
+        row = conn.execute("SELECT value FROM settings WHERE key = 'cloud_install_id'").fetchone()
+        if row and row[0]:
+            return row[0]
+        new_id = uuid.uuid4().hex
+        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('cloud_install_id', ?)", (new_id,))
+        conn.commit()
+        return new_id
+    finally:
+        conn.close()
+
+
 PUBLIC_KEY_MESSAGE = "This is the PUBLIC key (publishable / anon) — it cannot upload. In Supabase: Project Settings > API Keys > Secret keys > copy the key starting with sb_secret_ (or Legacy API keys > service_role)."
 
 
@@ -235,8 +261,27 @@ class SupabaseSync:
                     r["password"] = None
         return out
 
+    def cloud_owner(self):
+        rows = self._request("GET", "settings", "settings",
+                             params={"select": "value", "id": f"eq.{OWNER_ROW_ID}"}).json()
+        return rows[0]["value"] if rows else None
+
+    def claim_owner(self, install_id):
+        self._request("POST", "settings", "settings", params={"on_conflict": "id"},
+                      headers={"Prefer": "resolution=merge-duplicates,return=minimal"},
+                      json=[{"id": OWNER_ROW_ID, "key": OWNER_KEY, "value": install_id, "updated_at": None}])
+
     def push_all(self, db, progress=None):
         """Mirror every local table to Supabase. Returns {table: rows_synced}."""
+        # Safety: never mirror into a project that belongs to another POS computer
+        # (two PCs would overwrite each other; an empty new PC would wipe the cloud copy).
+        my_id = local_install_id(db)
+        owner = self.cloud_owner()
+        if owner and owner != my_id:
+            raise CloudSyncError(OWNER_MESSAGE)
+        if not owner:
+            self.claim_owner(my_id)
+
         conn = db.get_connection()
         try:
             local = {t: self._local_rows(conn, t, cols) for t, cols in TABLES.items()}
@@ -256,7 +301,7 @@ class SupabaseSync:
             # 2) delete rows that no longer exist locally (e.g. order items replaced on edit)
             local_ids = {r["id"] for r in rows}
             remote_ids = {r["id"] for r in self._fetch_all(table, "id")}
-            stale = sorted(remote_ids - local_ids)
+            stale = sorted(i for i in remote_ids - local_ids if i is not None and i >= 0)   # keep marker rows
             for start in range(0, len(stale), 200):
                 chunk = ",".join(str(x) for x in stale[start:start + 200])
                 self._request("DELETE", table, table, params={"id": f"in.({chunk})"},
@@ -294,6 +339,7 @@ class SupabaseSync:
                 dst.execute(stmt)
             counts = {}
             for table, rows in cloud.items():
+                rows = [r for r in rows if (r.get("id") or 0) >= 0]   # skip cloud-only marker rows
                 existing = {r[1] for r in dst.execute(f'PRAGMA table_info("{table}")')}
                 cols = [c for c in TABLES[table] if c in existing]
                 if not cols:
@@ -305,6 +351,10 @@ class SupabaseSync:
                 counts[table] = len(rows)
             for p in private:
                 dst.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (p["key"], p["value"]))
+            # Restoring this file makes this PC the owner of the cloud copy (e.g. replacing a broken PC)
+            owner = next((r.get("value") for r in cloud.get("settings", []) if r.get("id") == OWNER_ROW_ID), None)
+            if owner:
+                dst.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('cloud_install_id', ?)", (owner,))
             dst.commit()
         finally:
             dst.close()

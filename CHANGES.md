@@ -1,3 +1,17 @@
+# V1.6.2 — smaller app, safer cloud sync
+
+- **Smaller, faster-starting POS.exe**: the build no longer bundles all of Qt (web browser engine, video codecs, 3D…)
+  that the POS never uses.
+- **Cloud: one Supabase project = one POS computer.** If a second computer (or a new, empty install) tries to sync
+  to a project already used by another POS, the sync stops with a message instead of overwriting or deleting that
+  computer's data. To move to a new PC: ☁️⬇️ Download from Cloud, restore that backup, then sync as usual.
+  One computer with several brands/branches is fine — all brands sync together, no duplicates.
+- **Cloud: wrong key detected.** Pasting the public (publishable / anon) key now shows an error right away, and
+  🔌 Test connection checks that it can really upload (before, it could say "success" and the sync then failed with
+  a "row-level security" error).
+
+---
+
 # V1.6.1 — Duplicate products
 
 - **Products → 📄 ចម្លង (Duplicate)**: select a product and click 📄 ចម្លង (or right-click it). The form opens pre-filled
