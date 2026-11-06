@@ -95,6 +95,27 @@ class CloudSyncError(Exception):
     pass
 
 
+PUBLIC_KEY_MESSAGE = "This is the PUBLIC key (publishable / anon) — it cannot upload. In Supabase: Project Settings > API Keys > Secret keys > copy the key starting with sb_secret_ (or Legacy API keys > service_role)."
+
+
+def _jwt_role(key):
+    """Role claim of a legacy JWT key ("anon" / "service_role"), or None."""
+    import base64, json
+    try:
+        payload = key.split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        return json.loads(base64.urlsafe_b64decode(payload)).get("role")
+    except Exception:
+        return None
+
+
+def check_key_type(key):
+    """Reject the public keys up front — they can read nothing and write nothing here."""
+    key = (key or "").strip()
+    if key.startswith("sb_publishable_") or (key.startswith("eyJ") and _jwt_role(key) == "anon"):
+        raise CloudSyncError(PUBLIC_KEY_MESSAGE)
+
+
 def _coerce(value, typ):
     """Convert a SQLite value to something Postgres accepts for the column type."""
     if value is None:
@@ -130,6 +151,7 @@ class SupabaseSync:
             raise CloudSyncError("Supabase URL and key are required")
         if not url.startswith("https://"):
             raise CloudSyncError("Supabase URL must start with https://")
+        check_key_type(key)
         self.base = url + "/rest/v1"
         self.session = requests.Session()
         headers = {"apikey": key, "Content-Type": "application/json", "User-Agent": "POS-Desktop-Sync/1.0"}
@@ -149,6 +171,9 @@ class SupabaseSync:
             code = body.get("code", "")
         except ValueError:
             msg, code = resp.text[:300], ""
+        if code == "42501" or "row-level security" in msg:
+            # write refused by RLS => the request ran as the public role
+            raise CloudSyncError(PUBLIC_KEY_MESSAGE)
         if resp.status_code in (401, 403):
             raise CloudSyncError(f"Key rejected by Supabase ({resp.status_code}). Use the secret / service_role key. {msg}")
         if code in ("PGRST205", "42P01") or "Could not find the table" in msg:
@@ -179,6 +204,13 @@ class SupabaseSync:
         """Raises CloudSyncError with a readable message if something is wrong."""
         for table in TABLES:
             self._request("GET", table, table, params={"select": "id", "limit": 1})
+        # Reading alone is not enough (the public key can "read" an empty result):
+        # prove we can WRITE by inserting and removing a throw-away settings row.
+        probe = {"id": -1, "key": "__pos_write_test", "value": "1", "updated_at": None}
+        self._request("POST", "settings", "settings", params={"on_conflict": "id"},
+                      headers={"Prefer": "resolution=merge-duplicates,return=minimal"}, json=[probe])
+        self._request("DELETE", "settings", "settings", params={"id": "eq.-1"},
+                      headers={"Prefer": "return=minimal"})
         return True
 
     @staticmethod
