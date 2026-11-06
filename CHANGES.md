@@ -1,3 +1,12 @@
+# V1.6.1 — Duplicate products
+
+- **Products → 📄 ចម្លង (Duplicate)**: select a product and click 📄 ចម្លង (or right-click it). The form opens pre-filled
+  with the same name, category, unit, price and description; change the name and price (e.g. ជ្រូកខ្វៃ 3.5kg → 4.5kg, $95 → $115)
+  and click 💾 បន្ថែម to create a new product. Saving with a name that already exists is blocked. Stock is not copied.
+- Right-click on any product row: ✏️ Edit / 📄 Duplicate / 🗑 Delete.
+
+---
+
 # V1.6.0 — bug fixes + Supabase cloud backup
 
 No new Python packages are needed (cloud sync uses `requests`, already in requirements.txt).

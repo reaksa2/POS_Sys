@@ -253,7 +253,7 @@ class MainWindow(QMainWindow):
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(subtitle)
 
-        version = QLabel("Version 1.6.0")
+        version = QLabel("Version 1.6.1")
         version.setStyleSheet("font-size: 13px; color: #666;")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(version)
@@ -269,11 +269,13 @@ class MainWindow(QMainWindow):
         layout.addWidget(divider)
 
         # ==================== WHAT'S NEW ====================
-        whats_new_title = QLabel("✨ លក្ខណៈពិសេសថ្មី — v1.6.0")
+        whats_new_title = QLabel("✨ លក្ខណៈពិសេសថ្មី — v1.6.1")
         whats_new_title.setStyleSheet("font-size: 16px; font-weight: bold; color: #22C55E; margin-top: 6px;")
         layout.addWidget(whats_new_title)
 
         whats_new_items = [
+            "📄 ប៊ូតុងចម្លងទំនិញ — បង្កើតទំនិញថ្មីពីទំនិញដែលមានស្រាប់ (ឧ. ទម្ងន់ ឬតម្លៃផ្សេង)",
+            "🖱️ ចុចកណ្ដុរស្ដាំលើទំនិញ៖ កែប្រែ / ចម្លង / លុប",
             "☁️ បម្រុងទុកទិន្នន័យលើ Cloud (Supabase) ដោយស្វ័យប្រវត្តិ និងទាញយកមកស្តារវិញ",
             "🔐 ពាក្យសម្ងាត់ត្រូវបានរក្សាទុកដោយសុវត្ថិភាព (hash)",
             "🖨️ ទំហំក្រដាសបោះពុម្ព (A5 / A4 / 80mm) ដំណើរការពិតប្រាកដ",
