@@ -43,8 +43,20 @@ class ProductModel:
             INSERT INTO products (code,name, category_id,units_id,price,created_by, description)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', (data['code'], data['name'], data['category_id'],data['unit_id'],data['price'],data['created_by'], data['description']))
+        new_id = cursor.lastrowid
         conn.commit()
         conn.close()
+        return new_id
+
+    def name_exists(self, name):
+        """True if an active product already has exactly this name."""
+        conn = self.db.get_connection()
+        try:
+            row = conn.execute("SELECT 1 FROM products WHERE is_active = 1 AND TRIM(name) = TRIM(?) LIMIT 1",
+                               (name,)).fetchone()
+            return row is not None
+        finally:
+            conn.close()
 
 
     def update_product(self, product_id, data):

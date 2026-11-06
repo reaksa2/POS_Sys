@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QPushButton, QTableWidget, 
+    QWidget, QVBoxLayout, QLabel, QPushButton, QTableWidget, QMenu,
     QTableWidgetItem, QHBoxLayout, QLineEdit, QTabWidget,QDialog, QMessageBox,
     QHeaderView, QMessageBox
 )
@@ -83,12 +83,21 @@ class ProductWidget(QWidget):
         add_btn.clicked.connect(self.add_product)
 
 
+        duplicate_btn = QPushButton("📄 ចម្លង")
+        duplicate_btn.setStyleSheet(BTN_ADD)
+        duplicate_btn.setToolTip("ចម្លងទំនិញដែលបានជ្រើស ដើម្បីបង្កើតទំនិញថ្មីស្រដៀងគ្នា (ឧ. ទម្ងន់ ឬតម្លៃផ្សេង)")
+        duplicate_btn.clicked.connect(lambda: self.duplicate_product())
+
         delete_btn = QPushButton("🗑 លុបចេញ")
         delete_btn.setStyleSheet(BTN_CANCEL)
         delete_btn.clicked.connect(self.delete_selected)
 
+        # right-click menu on a product row
+        self.product_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.product_table.customContextMenuRequested.connect(self.show_product_menu)
 
         toolbar.addWidget(add_btn)
+        toolbar.addWidget(duplicate_btn)
         toolbar.addWidget(delete_btn)
         toolbar.addStretch()
         layout.addLayout(toolbar)
@@ -155,6 +164,64 @@ class ProductWidget(QWidget):
                     save_success_message(self,message="ការកែប្រែជោគជ័យ")
                 except Exception as e:
                     QMessageBox.critical(self, "Error", f"Failed to update product: {e}")
+
+    def _row_product_data(self, row):
+        return {
+            "name": self.product_table.item(row, 1).text(),
+            "price": to_float(self.product_table.item(row, 2).text()),
+            "unit": self.product_table.item(row, 3).text(),
+            "category": self.product_table.item(row, 4).text(),
+            "description": self.product_table.item(row, 5).text(),
+        }
+
+    def duplicate_product(self, row=None):
+        """Create a new product pre-filled from the selected one (e.g. same pork, other weight/price)."""
+        if row is None:
+            rows = sorted(set(i.row() for i in self.product_table.selectedIndexes()))
+            if not rows:
+                none_selected_warning(self, message="សូមជ្រើសរើសទំនិញមួយ ដើម្បីចម្លង")
+                return
+            row = rows[0]
+
+        dialog = ProductDialog(self, product_data=self._row_product_data(row), duplicate=True)
+        if dialog.exec() == QDialog.Accepted:
+            data = dialog.save_product()
+            if data:
+                try:
+                    new_id = self.app.pro.add_product(data)
+                    self.load_products()
+                    self.select_product(new_id)
+                    save_success_message(self, message=f"បានចម្លង ហើយបង្កើតទំនិញថ្មី «{data['name']}»")
+                except Exception as e:
+                    QMessageBox.critical(self, "Error", f"Failed to duplicate product: {e}")
+
+    def select_product(self, product_id):
+        for r in range(self.product_table.rowCount()):
+            item = self.product_table.item(r, 0)
+            if item and item.data(Qt.UserRole) == product_id:
+                self.product_table.selectRow(r)
+                self.product_table.scrollToItem(item)
+                return
+
+    def show_product_menu(self, pos):
+        index = self.product_table.indexAt(pos)
+        if not index.isValid():
+            return
+        self.product_table.selectRow(index.row())
+        menu = QMenu(self)
+        menu.setStyleSheet("QMenu { background:#2A2A2A; color:white; border:1px solid #444; padding:4px; }"
+                           "QMenu::item { padding:8px 20px; } QMenu::item:selected { background:#3B82F6; }")
+        act_edit = menu.addAction("✏️ កែប្រែ")
+        act_dup = menu.addAction("📄 ចម្លង")
+        menu.addSeparator()
+        act_del = menu.addAction("🗑 លុបចេញ")
+        chosen = menu.exec(self.product_table.viewport().mapToGlobal(pos))
+        if chosen == act_edit:
+            self.edit_product(index)
+        elif chosen == act_dup:
+            self.duplicate_product(index.row())
+        elif chosen == act_del:
+            self.delete_selected()
 
     def delete_selected(self):
         selected_rows = set(index.row() for index in self.product_table.selectedIndexes())
